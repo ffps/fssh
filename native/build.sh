@@ -84,14 +84,14 @@ while IFS=: read -r ABI TRIPLE API; do
 
   # ---- sftp-server
   B=$WORK/openssh-$ABI; rm -rf "$B"; cp -r "$WORK/openssh-src" "$B"; cd "$B"
+  # -D__sentinel__=__sentinel__: stop OpenSSH's defines.h from #defining it to nothing, which
+  # breaks bionic's unistd.h (__attribute__((__sentinel__(1)))) when it is included afterwards
   # NDK r23 headers for old API levels: llabs() is a static inline and mblen() is declared
   # (API 26+) -> tell configure they exist so openbsd-compat does not redeclare/macro them.
   # mblen is only used by the sftp client, never linked into sftp-server.
   ac_cv_func_llabs=yes ac_cv_func_mblen=yes ac_cv_func_getpagesize=yes ac_cv_func_lldiv=yes \
   ac_cv_func_strtoll=yes ac_cv_func_strtoull=yes ac_cv_func_atoll=yes \
   ac_cv_func_bzero=yes ac_cv_func_bcopy=yes ac_cv_func_bcmp=yes ac_cv_func_getrrsetbyname=yes ac_cv_search_getrrsetbyname='none required' \
-  # -D__sentinel__=__sentinel__: stop OpenSSH's defines.h from #defining it to nothing, which
-  # breaks bionic's unistd.h (__attribute__((__sentinel__(1)))) when it is included afterwards
   ./configure --host="$HOSTT" CC="$CC" CFLAGS="$COMMON_CFLAGS -D__sentinel__=__sentinel__" LDFLAGS="$COMMON_LDFLAGS" \
       --without-openssl --without-zlib --without-pam --without-selinux --without-libedit \
       --without-hardening --disable-largefile --disable-strip --disable-security-key --disable-pkcs11 >/dev/null
