@@ -4,18 +4,21 @@
     <string name="port">Port</string>
     <string name="password">Password</string>
     <string name="show_password">Show password</string>
+    <string name="home_dir">Home directory</string>
     <string name="autostart">Start on device boot</string>
-    <string name="start">Start</string>
-    <string name="stop">Stop</string>
+    <string name="start">START SERVICE</string>
+    <string name="stop">STOP SERVICE</string>
+    <string name="notif_title">fSSH Server is running</string>
     <string name="starting">Starting…</string>
-    <string name="listening">Port %d</string>
-    <string name="status_running">Running on port %d</string>
+    <string name="status_running">Running %s</string>
     <string name="status_stopped">Stopped</string>
-    <string name="status_error">Error: %s</string>
+    <string name="status_failed">Failed %s</string>
+    <string name="no_network">port %d (no network)</string>
     <string name="err_port">Port must be 1–65535</string>
     <string name="err_password">Set a password to start the server</string>
     <string name="err_config">Port or password is not set</string>
     <string name="err_binary">Server binary not found for this CPU</string>
     <string name="err_start">Cannot start server</string>
     <string name="err_exited">Server exited</string>
+    <string name="files_hint">"All files access" is not granted - /storage is not readable</string>
 </resources>

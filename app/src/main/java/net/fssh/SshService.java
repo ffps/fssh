@@ -9,6 +9,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.IBinder;
 import android.os.PowerManager;
 
@@ -39,6 +41,15 @@ public class SshService extends Service {
 
     private Process proc;
     private volatile boolean stopping;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private String shownUri = "";
+    private final Runnable refreshNotif = new Runnable() {
+        @Override
+        public void run() {
+            if (running) updateNotif();
+            handler.postDelayed(this, 10000);
+        }
+    };
     private PowerManager.WakeLock wl;
     private WifiManager.WifiLock wfl;
 
@@ -91,7 +102,7 @@ public class SshService extends Service {
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
                 ? new Notification.Builder(this, CHANNEL) : new Notification.Builder(this);
         b.setSmallIcon(R.drawable.ic_stat)
-                .setContentTitle(getString(R.string.app_name))
+                .setContentTitle(getString(R.string.notif_title))
                 .setContentText(text)
                 .setContentIntent(pi)
                 .setOngoing(true)
@@ -135,19 +146,29 @@ public class SshService extends Service {
         }
         killOurs(db.getPath()); // leftovers of a previously killed app process
 
-        File home = getFilesDir();
+        File files = getFilesDir();
+        File bin = new File(files, "bin");
+        bin.mkdirs();
+        // NetBox/WinSCP-style clients run "scp -t ..." through a shell: scp must be in PATH
+        link(bin, "scp", new File(lib, "libscp.so"));
+        File sshDir = new File(files, "ssh");
+        sshDir.mkdirs();
+        String home = Cfg.home(this);
         try {
             ProcessBuilder pb = new ProcessBuilder(db.getPath(),
                     "-F",              // stay in foreground
                     "-e",              // pass environment (ANDROID_ROOT, ...) to sessions
                     "-R",              // generate host keys on demand
+                    "-D", sshDir.getPath(), // authorized_keys lives here, not in the (sdcard) home
                     "-p", String.valueOf(port),
                     "-W", "131072",
                     "-K", "60",
                     "-T", "5");
             Map<String, String> env = pb.environment();
-            env.put("HOME", home.getPath());
-            env.put("FSSH_KEYDIR", home.getPath());
+            env.put("HOME", home);
+            env.put("FSSH_KEYDIR", files.getPath());
+            String path = env.get("PATH");
+            env.put("PATH", bin.getPath() + (path == null || path.length() == 0 ? "" : ":" + path));
             env.put("FSSH_SCP", new File(lib, "libscp.so").getPath());
             env.put("FSSH_SFTP", new File(lib, "libsftp.so").getPath());
             env.put("TMPDIR", getCacheDir().getPath());
@@ -166,9 +187,9 @@ public class SshService extends Service {
 
         running = true;
         acquireLocks();
-        String ips = ips();
-        ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(NOTIF_ID,
-                notif(getString(R.string.listening, port) + (ips.length() > 0 ? " · " + ips : "")));
+        updateNotif();
+        handler.removeCallbacks(refreshNotif);
+        handler.postDelayed(refreshNotif, 10000); // the IP may appear later (wifi after boot)
 
         final Process p = proc;
         new Thread(new Runnable() {
@@ -222,6 +243,7 @@ public class SshService extends Service {
     public void onDestroy() {
         stopping = true;
         running = false;
+        handler.removeCallbacks(refreshNotif);
         Process p;
         synchronized (this) { p = proc; proc = null; }
         String bin = new File(getApplicationInfo().nativeLibraryDir, "libdropbear.so").getPath();
@@ -232,6 +254,36 @@ public class SshService extends Service {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private void updateNotif() {
+        String u = uri(this);
+        if (u.equals(shownUri)) return;
+        shownUri = u;
+        ((NotificationManager) getSystemService(NOTIFICATION_SERVICE)).notify(NOTIF_ID, notif(u));
+    }
+
+    /** "ssh://192.168.1.29:8022" (or a hint when there is no network yet). */
+    static String uri(Context c) {
+        int port = Cfg.port(c);
+        String ip = ip();
+        return ip.length() > 0 ? "ssh://" + ip + ":" + port : c.getString(R.string.no_network, port);
+    }
+
+    private static void link(File dir, String name, File target) {
+        File l = new File(dir, name);
+        try {
+            l.delete();
+            String ln = new File("/system/bin/ln").exists() ? "/system/bin/ln" : "ln";
+            new ProcessBuilder(ln, "-s", target.getPath(), l.getPath()).redirectErrorStream(true).start().waitFor();
+        } catch (Exception ignored) { }
+    }
+
+    /** First IPv4 address of an up, non-loopback interface ("" if none). */
+    static String ip() {
+        String all = ips();
+        int c = all.indexOf(',');
+        return c < 0 ? all : all.substring(0, c);
+    }
 
     /** IPv4 addresses of the up, non-loopback interfaces, comma separated. */
     static String ips() {

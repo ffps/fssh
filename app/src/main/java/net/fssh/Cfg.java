@@ -2,6 +2,7 @@ package net.fssh;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Environment;
 
 /** Settings storage (app-private SharedPreferences). */
 final class Cfg {
@@ -19,8 +20,18 @@ final class Cfg {
     /** true = the user wants the server running (restored after a process kill) */
     static boolean want(Context c) { return p(c).getBoolean("want", false); }
 
-    static void save(Context c, int port, String pass) {
-        p(c).edit().putInt("port", port).putString("pass", pass).commit();
+    /** Directory where sessions start (and scp/sftp relative paths resolve). */
+    static String home(Context c) {
+        String h = p(c).getString("home", null);
+        return (h == null || h.length() == 0) ? defaultHome() : h;
+    }
+
+    static String defaultHome() {
+        return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).getAbsolutePath();
+    }
+
+    static void save(Context c, int port, String pass, String home) {
+        p(c).edit().putInt("port", port).putString("pass", pass).putString("home", home).commit();
     }
     static void setAutostart(Context c, boolean v) { p(c).edit().putBoolean("auto", v).commit(); }
     static void setWant(Context c, boolean v) { p(c).edit().putBoolean("want", v).commit(); }

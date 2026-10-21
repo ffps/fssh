@@ -2,16 +2,20 @@ package net.fssh;
 
 import android.Manifest;
 import android.app.Activity;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.StateListDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
+import android.provider.Settings;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.text.method.PasswordTransformationMethod;
 import android.view.Gravity;
 import android.view.View;
@@ -24,11 +28,11 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-/** Settings window: port, password, autostart, start/stop. Built in code to keep the APK tiny. */
+/** Settings window. Built in code to keep the APK tiny. */
 public class MainActivity extends Activity {
-    private static final int GREEN = 0xFF0D9488, RED = 0xFFD32F2F;
+    private static final int GREEN = 0xFF0D9488, RED = 0xFFD32F2F, GRAY = 0xFF666666;
 
-    private EditText etPort, etPass;
+    private EditText etPort, etPass, etHome;
     private CheckBox cbShow, cbAuto;
     private TextView tvStatus;
     private Button btn;
@@ -56,6 +60,14 @@ public class MainActivity extends Activity {
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(dp(16), dp(16), dp(16), dp(16));
 
+        // status: always exactly one line so nothing below it moves
+        tvStatus = new TextView(this);
+        tvStatus.setTextSize(16);
+        tvStatus.setTypeface(Typeface.DEFAULT_BOLD);
+        tvStatus.setSingleLine(true);
+        tvStatus.setEllipsize(TextUtils.TruncateAt.END);
+        col.addView(tvStatus, new LinearLayout.LayoutParams(-1, -2));
+
         col.addView(label(R.string.port));
         etPort = new EditText(this);
         etPort.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -82,6 +94,13 @@ public class MainActivity extends Activity {
         });
         col.addView(cbShow);
 
+        col.addView(label(R.string.home_dir));
+        etHome = new EditText(this);
+        etHome.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        etHome.setSingleLine(true);
+        etHome.setText(Cfg.home(this));
+        col.addView(etHome, new LinearLayout.LayoutParams(-1, -2));
+
         cbAuto = new CheckBox(this);
         cbAuto.setText(R.string.autostart);
         cbAuto.setChecked(Cfg.autostart(this));
@@ -91,24 +110,22 @@ public class MainActivity extends Activity {
                 Cfg.setAutostart(MainActivity.this, on);
             }
         });
-        col.addView(cbAuto);
-
-        tvStatus = new TextView(this);
-        tvStatus.setTextSize(15);
-        tvStatus.setPadding(0, dp(16), 0, dp(16));
-        col.addView(tvStatus, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams cl = new LinearLayout.LayoutParams(-2, -2);
+        cl.topMargin = dp(8);
+        col.addView(cbAuto, cl);
 
         btn = new Button(this);
         btn.setTextColor(Color.WHITE);
-        btn.setAllCaps(true);
-        btn.setMinWidth(dp(180));
+        btn.setMinWidth(dp(220));
         btn.setMinimumHeight(dp(48));
+        btn.setPadding(dp(24), 0, dp(24), 0);
         btn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) { toggle(); }
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2); // not stretched
         lp.gravity = Gravity.CENTER_HORIZONTAL;
+        lp.topMargin = dp(24);
         col.addView(btn, lp);
 
         ScrollView sv = new ScrollView(this);
@@ -122,18 +139,44 @@ public class MainActivity extends Activity {
         TextView t = new TextView(this);
         t.setText(res);
         t.setTextSize(13);
-        t.setPadding(0, dp(8), 0, 0);
+        t.setPadding(0, dp(12), 0, 0);
         return t;
     }
 
+    private boolean allFilesGranted() {
+        return Build.VERSION.SDK_INT < 30 || Environment.isExternalStorageManager();
+    }
+
+    private void askAllFiles() {
+        if (allFilesGranted()) return;
+        try {
+            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** First launch only: notifications (13+), then storage access. */
     private void askPermissions() {
         if (Cfg.asked(this) || Build.VERSION.SDK_INT < 23) return;
         Cfg.setAsked(this);
         if (Build.VERSION.SDK_INT >= 33) {
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1);
-        } else if (Build.VERSION.SDK_INT <= 29) {
+        } else if (Build.VERSION.SDK_INT >= 30) {
+            askAllFiles();
+        } else {
             requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
         }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(code, perms, res);
+        if (Build.VERSION.SDK_INT >= 33) askAllFiles(); // after the notification dialog
     }
 
     private void toggle() {
@@ -160,9 +203,15 @@ public class MainActivity extends Activity {
             Toast.makeText(this, R.string.err_password, Toast.LENGTH_SHORT).show();
             return;
         }
-        Cfg.save(this, port, pass);
+        String home = etHome.getText().toString().trim();
+        if (home.length() == 0) {
+            home = Cfg.defaultHome();
+            etHome.setText(home);
+        }
+        Cfg.save(this, port, pass, home);
         Cfg.setWant(this, true);
         SshService.error = "";
+        if (!allFilesGranted()) Toast.makeText(this, R.string.files_hint, Toast.LENGTH_LONG).show();
         Intent s = new Intent(this, SshService.class);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(s);
         else startService(s);
@@ -175,35 +224,35 @@ public class MainActivity extends Activity {
         shownRunning = run;
         etPort.setEnabled(!run);
         etPass.setEnabled(!run);
+        etHome.setEnabled(!run);
         btn.setText(run ? R.string.stop : R.string.start);
         btn.setBackgroundDrawable(bg(run ? RED : GREEN));
         String err = SshService.error;
         if (run) {
-            String ips = SshService.ips();
-            tvStatus.setText(getString(R.string.status_running, Cfg.port(this))
-                    + (ips.length() > 0 ? "\n" + ips : ""));
+            tvStatus.setText(getString(R.string.status_running, SshService.uri(this)));
             tvStatus.setTextColor(GREEN);
         } else if (err != null && err.length() > 0) {
-            tvStatus.setText(getString(R.string.status_error, err));
+            tvStatus.setText(getString(R.string.status_failed, err));
             tvStatus.setTextColor(RED);
         } else {
             tvStatus.setText(R.string.status_stopped);
-            tvStatus.setTextColor(0xFF666666);
+            tvStatus.setTextColor(GRAY);
         }
     }
 
     private Drawable bg(int color) {
         StateListDrawable s = new StateListDrawable();
-        s.addState(new int[]{android.R.attr.state_pressed}, rect(darker(color)));
-        s.addState(new int[]{-android.R.attr.state_enabled}, rect(0xFF9E9E9E));
-        s.addState(new int[]{}, rect(color));
+        s.addState(new int[]{android.R.attr.state_pressed}, pill(darker(color)));
+        s.addState(new int[]{-android.R.attr.state_enabled}, pill(0xFF9E9E9E));
+        s.addState(new int[]{}, pill(color));
         return s;
     }
 
-    private Drawable rect(int color) {
+    /** Rectangle with fully rounded ends. */
+    private Drawable pill(int color) {
         GradientDrawable g = new GradientDrawable();
         g.setColor(color);
-        g.setCornerRadius(dp(4));
+        g.setCornerRadius(dp(200)); // clamped to half of the height
         return g;
     }
 
@@ -217,18 +266,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // process may have been restarted while the service is alive: nothing to restore, state is polled
         h.post(poll);
     }
 
     @Override
     protected void onPause() {
         h.removeCallbacks(poll);
-        if (!shownRunning) {
-            // keep what the user typed
+        if (!shownRunning) { // keep what the user typed
             try {
                 int port = Integer.parseInt(etPort.getText().toString().trim());
-                if (port >= 1 && port <= 65535) Cfg.save(this, port, etPass.getText().toString());
+                if (port >= 1 && port <= 65535) {
+                    Cfg.save(this, port, etPass.getText().toString(), etHome.getText().toString().trim());
+                }
             } catch (NumberFormatException ignored) {
             }
         }
