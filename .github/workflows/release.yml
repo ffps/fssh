@@ -58,7 +58,7 @@ jobs:
 
       - name: Build native SSH server (dropbear + scp + sftp-server)
         run: |
-          native/build.sh "$NDK_DIR" app/src/main/jniLibs
+          bash native/build.sh "$NDK_DIR" app/src/main/jniLibs
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
             for f in libdropbear.so libscp.so libsftp.so; do
               test -s "app/src/main/jniLibs/$abi/$f" || { echo "missing $abi/$f"; exit 1; }
