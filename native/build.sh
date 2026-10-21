@@ -57,10 +57,17 @@ while IFS=: read -r ABI TRIPLE API; do
   # mblen is only used by the sftp client, never linked into sftp-server.
   ac_cv_func_llabs=yes ac_cv_func_mblen=yes ac_cv_func_getpagesize=yes ac_cv_func_lldiv=yes \
   ac_cv_func_strtoll=yes ac_cv_func_strtoull=yes ac_cv_func_atoll=yes \
-  ac_cv_func_bzero=yes ac_cv_func_bcopy=yes ac_cv_func_bcmp=yes \
+  ac_cv_func_bzero=yes ac_cv_func_bcopy=yes ac_cv_func_bcmp=yes ac_cv_func_getrrsetbyname=yes \
   ./configure --host="$HOSTT" CC="$CC" CFLAGS="$COMMON_CFLAGS" LDFLAGS="$COMMON_LDFLAGS" \
       --without-openssl --without-zlib --without-pam --without-selinux --without-libedit \
       --without-hardening --disable-largefile --disable-strip --disable-security-key --disable-pkcs11 >/dev/null
+  # Build the compat library tolerantly: objects sftp-server does not need (DNS, pty, ...) may fail
+  # on these old headers; archive whatever compiled and let the final link decide.
+  make -k -j"$JOBS" openbsd-compat/libopenbsd-compat.a >/dev/null 2>&1 || true
+  if [ ! -f openbsd-compat/libopenbsd-compat.a ]; then
+    echo "compat library incomplete, archiving the objects that compiled:"
+    (cd openbsd-compat && "$AR" rcs libopenbsd-compat.a *.o)
+  fi
   make -j"$JOBS" sftp-server >/dev/null
   "$STRIP" -o "$OUT/$ABI/libsftp.so" sftp-server
   ls -l "$OUT/$ABI"
