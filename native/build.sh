@@ -52,6 +52,10 @@ while IFS=: read -r ABI TRIPLE API; do
 
   # ---- sftp-server
   B=$WORK/openssh-$ABI; rm -rf "$B"; cp -r "$WORK/openssh-src" "$B"; cd "$B"
+  # NDK r23 headers for old API levels: llabs() is a static inline and mblen() is declared
+  # (API 26+) -> tell configure they exist so openbsd-compat does not redeclare/macro them.
+  # mblen is only used by the sftp client, never linked into sftp-server.
+  ac_cv_func_llabs=yes ac_cv_func_mblen=yes \
   ./configure --host="$HOSTT" CC="$CC" CFLAGS="$COMMON_CFLAGS" LDFLAGS="$COMMON_LDFLAGS" \
       --without-openssl --without-zlib --without-pam --without-selinux --without-libedit \
       --without-hardening --disable-largefile --disable-strip --disable-security-key --disable-pkcs11 >/dev/null

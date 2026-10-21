@@ -29,10 +29,11 @@ Workflow `.github/workflows/release.yml` соберёт `fSSH-1.2.3.apk` и пр
 Локально: `native/build.sh <NDK r23c> app/src/main/jniLibs`, затем `gradle :app:assembleRelease`.
 NDK r23c — последний, поддерживающий API 17.
 
-## Иконки
+## 
 
-`icons/` — пять вариантов (SVG + PNG 512). В приложении сейчас вариант 1
-(`app/src/main/res/drawable*/ic_launcher*.xml`, `ic_stat.xml`).
+## Иконка
+
+`icons/fssh.svg` — исходник; PNG для приложения получены из него (`res/drawable-*dpi/ic_launcher.png`, `ic_stat.png`), для Android 8+ — adaptive-иконка.
 
 ## Лицензии
 

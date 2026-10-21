@@ -1,4 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-<rect width="512" height="512" rx="112" fill="#0B5CAD"/>
-<path fill="#fff" d="M256 84 400 138V256c0 86-62 146-144 180C174 402 112 342 112 256V138z"/><g transform="translate(170,190) scale(.52)"><polygon fill="#0D9488" points="0,0 52,0 232,118 52,236 0,236 180,118"/></g><rect fill="#0D9488" x="274" y="318" width="72" height="26" rx="8"/>
-</svg>
