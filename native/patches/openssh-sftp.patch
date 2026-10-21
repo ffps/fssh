@@ -1,0 +1,35 @@
+diff --git a/sftp-server-main.c b/sftp-server-main.c
+index 2c70f89..e5a5fa7 100644
+--- a/sftp-server-main.c
++++ b/sftp-server-main.c
+@@ -19,6 +19,8 @@
+ 
+ #include <sys/types.h>
+ #include <pwd.h>
++#include <stdlib.h>
++#include <string.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <unistd.h>
+@@ -43,9 +45,18 @@ main(int argc, char **argv)
+ 	sanitise_stdfd();
+ 
+ 	if ((user_pw = getpwuid(getuid())) == NULL) {
+-		fprintf(stderr, "No user found for uid %lu\n",
+-		    (u_long)getuid());
+-		return 1;
++		/* fSSH: old Android may not resolve app uids */
++		static struct passwd fake;
++		const char *home = getenv("HOME");
++		memset(&fake, 0, sizeof(fake));
++		fake.pw_name = "fssh";
++		fake.pw_passwd = "";
++		fake.pw_gecos = "";
++		fake.pw_uid = getuid();
++		fake.pw_gid = getgid();
++		fake.pw_dir = (char *)((home && *home) ? home : "/");
++		fake.pw_shell = "/system/bin/sh";
++		user_pw = &fake;
+ 	}
+ 
+ 	return (sftp_server_main(argc, argv, user_pw));

@@ -1,0 +1,263 @@
+diff --git a/src/compat.c b/src/compat.c
+index d597d83..51c01ad 100644
+--- a/src/compat.c
++++ b/src/compat.c
+@@ -310,3 +310,98 @@ uint32_t le32toh(uint32_t inp) {
+ }
+ 
+ #endif /* HAVE_HTOLE64 */
++
++/* ---- fSSH: single user, single password, Android environment ---- */
++#include "fssh.h"
++#undef getpwnam
++
++#define FSSH_MAXPW 256
++static char fssh_pw[FSSH_MAXPW + 1];
++static size_t fssh_pwlen = 0;
++
++/* Password is read from stdin (until EOF) once at startup, so it never
++ * appears in argv or the environment. */
++void fssh_init_password(void) {
++	size_t n = 0;
++	ssize_t r;
++	while (n < FSSH_MAXPW && (r = read(0, fssh_pw + n, FSSH_MAXPW - n)) > 0) {
++		n += (size_t)r;
++	}
++	while (n > 0 && (fssh_pw[n-1] == '\n' || fssh_pw[n-1] == '\r')) {
++		n--;
++	}
++	fssh_pw[n] = '\0';
++	fssh_pwlen = n;
++	{
++		int fd = open("/dev/null", O_RDONLY);
++		if (fd >= 0) {
++			dup2(fd, 0);
++			if (fd > 2) close(fd);
++		}
++	}
++}
++
++int fssh_password_ok(const char *pw, unsigned int len) {
++	size_t i;
++	unsigned char diff;
++	if (fssh_pwlen == 0 || len != fssh_pwlen) {
++		return 0;
++	}
++	diff = 0;
++	for (i = 0; i < len; i++) {
++		diff |= (unsigned char)(pw[i] ^ fssh_pw[i]);
++	}
++	return diff == 0;
++}
++
++/* Any login name maps to the user the server runs as. */
++struct passwd *fssh_getpwnam(const char *name) {
++	static struct passwd pw;
++	static char namebuf[256];
++	const char *home = getenv("HOME");
++	const char *shell = getenv("FSSH_SHELL");
++	memset(&pw, 0, sizeof(pw));
++	strncpy(namebuf, name ? name : "", sizeof(namebuf) - 1);
++	namebuf[sizeof(namebuf) - 1] = '\0';
++	pw.pw_name = namebuf;
++	pw.pw_passwd = (char*)"fssh";
++	pw.pw_uid = getuid();
++	pw.pw_gid = getgid();
++	pw.pw_dir = (char*)((home && *home) ? home : "/");
++	pw.pw_shell = (char*)((shell && *shell) ? shell : "/system/bin/sh");
++	return &pw;
++}
++
++const char *fssh_default_path(void) {
++	const char *p = getenv("PATH");
++	return (p && *p) ? p : "/system/bin:/system/xbin";
++}
++
++const char *fssh_sftp_path(void) {
++	const char *p = getenv("FSSH_SFTP");
++	return (p && *p) ? p : "/system/bin/false";
++}
++
++/* "scp ..." -> "<FSSH_SCP> ..." (Android has no scp binary in PATH) */
++const char *fssh_fix_cmd(const char *cmd) {
++	const char *scp = getenv("FSSH_SCP");
++	if (cmd && scp && *scp && strncmp(cmd, "scp ", 4) == 0) {
++		size_t l = strlen(scp) + strlen(cmd) + 1;
++		char *n = (char*)malloc(l);
++		if (n) {
++			snprintf(n, l, "%s %s", scp, cmd + 4);
++			return n;
++		}
++	}
++	return cmd;
++}
++
++/* host keys live in $FSSH_KEYDIR (the app's files dir) */
++const char *fssh_hostkey(int type) {
++	static const char *names[4] = {"rsa", "dss", "ecdsa", "ed25519"};
++	static char bufs[4][512];
++	const char *dir = getenv("FSSH_KEYDIR");
++	snprintf(bufs[type & 3], sizeof(bufs[0]), "%s/dropbear_%s_host_key",
++		(dir && *dir) ? dir : ".", names[type & 3]);
++	return bufs[type & 3];
++}
+diff --git a/src/fssh.h b/src/fssh.h
+new file mode 100644
+index 0000000..9cbe4e9
+--- /dev/null
++++ b/src/fssh.h
+@@ -0,0 +1,15 @@
++#ifndef FSSH_H
++#define FSSH_H
++/* fSSH: single-user Android adaptations */
++#include <pwd.h>
++
++struct passwd *fssh_getpwnam(const char *name);
++void fssh_init_password(void);
++int fssh_password_ok(const char *pw, unsigned int len);
++const char *fssh_default_path(void);
++const char *fssh_sftp_path(void);
++const char *fssh_fix_cmd(const char *cmd);
++const char *fssh_hostkey(int type);
++
++#define getpwnam(x) fssh_getpwnam(x)
++#endif
+diff --git a/src/includes.h b/src/includes.h
+index e2ca2a3..46369e2 100644
+--- a/src/includes.h
++++ b/src/includes.h
+@@ -191,6 +191,7 @@ extern char** environ;
+ #include "fake-rfc2553.h"
+ 
+ #include "fuzz.h"
++#include "fssh.h"
+ 
+ #ifndef LOG_AUTHPRIV
+ #define LOG_AUTHPRIV LOG_AUTH
+diff --git a/src/sshpty.c b/src/sshpty.c
+index 9f12d67..0a9dc79 100644
+--- a/src/sshpty.c
++++ b/src/sshpty.c
+@@ -48,7 +48,31 @@
+ int
+ pty_allocate(int *ptyfd, int *ttyfd, char *namebuf, int namebuflen)
+ {
+-#if defined(HAVE_OPENPTY)
++#if defined(FSSH_PTY)
++	/* fSSH: Linux/Android without openpty()/ptsname() (bionic < API 21/23) */
++	int ptm, unlock = 0;
++	unsigned int ptn = 0;
++
++	ptm = open("/dev/ptmx", O_RDWR | O_NOCTTY);
++	if (ptm < 0) {
++		dropbear_log(LOG_WARNING, "pty_allocate: /dev/ptmx: %.100s", strerror(errno));
++		return 0;
++	}
++	if (ioctl(ptm, TIOCSPTLCK, &unlock) < 0 || ioctl(ptm, TIOCGPTN, &ptn) < 0) {
++		dropbear_log(LOG_WARNING, "pty_allocate: ioctl: %.100s", strerror(errno));
++		close(ptm);
++		return 0;
++	}
++	snprintf(namebuf, namebuflen, "/dev/pts/%u", ptn);
++	*ttyfd = open(namebuf, O_RDWR | O_NOCTTY);
++	if (*ttyfd < 0) {
++		dropbear_log(LOG_ERR, "error opening pts %.100s: %.100s", namebuf, strerror(errno));
++		close(ptm);
++		return 0;
++	}
++	*ptyfd = ptm;
++	return 1;
++#elif defined(HAVE_OPENPTY)
+ 	/* exists in recent (4.4) BSDs and OSF/1 */
+ 	char *name;
+ 	int i;
+@@ -360,6 +384,12 @@ pty_setowner(struct passwd *pw, const char *tty_name)
+ 	mode_t mode;
+ 	struct stat st;
+ 
++#ifdef FSSH_PTY
++	/* fSSH: we created the pty ourselves, nothing to chown */
++	(void)pw; (void)tty_name; (void)grp; (void)gid; (void)mode; (void)st;
++	return;
++#endif
++
+ 	/* Determine the group to make the owner of the tty. */
+ 	grp = getgrnam("tty");
+ 	if (grp) {
+diff --git a/src/svr-auth.c b/src/svr-auth.c
+index ca19382..4fd3432 100644
+--- a/src/svr-auth.c
++++ b/src/svr-auth.c
+@@ -315,6 +315,10 @@ static int checkusername(const char *username, unsigned int userlen) {
+ 	/* check the shell is valid. If /etc/shells doesn't exist, getusershell()
+ 	 * should return some standard shells like "/bin/sh" and "/bin/csh" (this
+ 	 * is platform-specific) */
++	if (1) { /* fSSH: Android has no /etc/shells */
++		(void)listshell;
++		goto goodshell;
++	}
+ 	setusershell();
+ 	while ((listshell = getusershell()) != NULL) {
+ 		TRACE(("test shell is '%s'", listshell))
+@@ -332,7 +336,7 @@ static int checkusername(const char *username, unsigned int userlen) {
+ 	return DROPBEAR_FAILURE;
+ 	
+ goodshell:
+-	endusershell();
++	;
+ 	TRACE(("matching shell"))
+ 
+ 	TRACE(("uid = %d", ses.authstate.pw_uid))
+diff --git a/src/svr-authpasswd.c b/src/svr-authpasswd.c
+index 899a8ab..6204236 100644
+--- a/src/svr-authpasswd.c
++++ b/src/svr-authpasswd.c
+@@ -68,7 +68,8 @@ void svr_auth_password(int valid_user) {
+ 	if (valid_user && passwordlen <= DROPBEAR_MAX_PASSWORD_LEN) {
+ 		/* the first bytes of passwdcrypt are the salt */
+ 		passwdcrypt = ses.authstate.pw_passwd;
+-		testcrypt = crypt(password, passwdcrypt);
++		/* fSSH: single static password instead of crypt() */
++		testcrypt = fssh_password_ok(password, passwordlen) ? passwdcrypt : "";
+ 	}
+ 	m_burn(password, passwordlen);
+ 	m_free(password);
+diff --git a/src/svr-chansession.c b/src/svr-chansession.c
+index a2ea1fc..565d019 100644
+--- a/src/svr-chansession.c
++++ b/src/svr-chansession.c
+@@ -1062,7 +1062,7 @@ static void execchild(const void *user_data) {
+ #endif
+ 
+ 	usershell = m_strdup(get_user_shell());
+-	run_shell_command(chansess->cmd, ses.maxfd, usershell);
++	run_shell_command(fssh_fix_cmd(chansess->cmd), ses.maxfd, usershell);
+ 
+ 	/* only reached on error */
+ 	dropbear_exit("Child failed");
+diff --git a/src/svr-main.c b/src/svr-main.c
+index a77343c..5be6f30 100644
+--- a/src/svr-main.c
++++ b/src/svr-main.c
+@@ -59,6 +59,8 @@ int main(int argc, char ** argv)
+ 		dropbear_exit("Bad argc");
+ 	}
+ 
++	fssh_init_password();
++
+ 	/* get commandline options */
+ 	svr_getopts(argc, argv);
+ 
+diff --git a/src/sysoptions.h b/src/sysoptions.h
+index 6e50f8f..524d4d0 100644
+--- a/src/sysoptions.h
++++ b/src/sysoptions.h
+@@ -346,7 +346,7 @@
+ #error "DROPBEAR_SVR_PAM_AUTH requires PAM headers. Perhaps ./configure --enable-pam ?"
+ #endif
+ 
+-#if DROPBEAR_SVR_PASSWORD_AUTH && !HAVE_CRYPT
++#if 0 /* fSSH: password is checked without crypt() */
+ 	#error "DROPBEAR_SVR_PASSWORD_AUTH requires `crypt()'."
+ #endif
+ 

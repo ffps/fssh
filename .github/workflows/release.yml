@@ -1,0 +1,124 @@
+name: Build APK
+
+# Push a tag (e.g. v1.2.3) -> release APK "fSSH-1.2.3.apk" is built and attached to a GitHub Release.
+on:
+  push:
+    tags:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for a manual test build (without "v")'
+        required: false
+        default: '0.0.0-test'
+
+permissions:
+  contents: write
+
+env:
+  # last NDK that can target Android 4.2 (API 17); r26+ dropped API < 21
+  NDK_VERSION: 23.2.8568313
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from tag
+        id: ver
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then RAW="${GITHUB_REF_NAME}"; else RAW="${{ github.event.inputs.version }}"; fi
+          VER="${RAW#v}"; VER="${VER#V}"
+          if [[ "$VER" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+            CODE=$(( ${BASH_REMATCH[1]} * 1000000 + ${BASH_REMATCH[2]} * 1000 + ${BASH_REMATCH[3]} ))
+          else
+            CODE="${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE"   >> "$GITHUB_OUTPUT"
+          echo "APK name: fSSH-$VER.apk (versionCode $CODE)"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install NDK ${{ env.NDK_VERSION }} and build tools
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq autoconf automake
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses >/dev/null || true
+          "$SDKM" "ndk;${NDK_VERSION}" "platforms;android-34" "build-tools;34.0.0" >/dev/null
+          echo "NDK_DIR=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Build native SSH server (dropbear + scp + sftp-server)
+        run: |
+          native/build.sh "$NDK_DIR" app/src/main/jniLibs
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            for f in libdropbear.so libscp.so libsftp.so; do
+              test -s "app/src/main/jniLibs/$abi/$f" || { echo "missing $abi/$f"; exit 1; }
+            done
+          done
+          file app/src/main/jniLibs/*/libdropbear.so
+
+      - name: Prepare signing key
+        shell: bash
+        env:
+          KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KS_KEYPASS: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          KS="$RUNNER_TEMP/release.jks"
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$KS"
+            { echo "KEYSTORE_FILE=$KS"; echo "KEYSTORE_PASSWORD=$KS_PASS"
+              echo "KEY_ALIAS=$KS_ALIAS"; echo "KEY_PASSWORD=${KS_KEYPASS:-$KS_PASS}"; } >> "$GITHUB_ENV"
+          else
+            P="tmp$(openssl rand -hex 8)"
+            keytool -genkeypair -keystore "$KS" -storepass "$P" -keypass "$P" -alias fssh \
+              -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=fSSH temporary build key"
+            { echo "KEYSTORE_FILE=$KS"; echo "KEYSTORE_PASSWORD=$P"
+              echo "KEY_ALIAS=fssh"; echo "KEY_PASSWORD=$P"; } >> "$GITHUB_ENV"
+            echo "::warning::No KEYSTORE_BASE64 secret: APK signed with a temporary key. Updating over a previous build will require uninstalling it first."
+          fi
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.10.2
+
+      - name: Build APK
+        run: >
+          gradle --no-daemon :app:assembleRelease
+          -PappVersionName=${{ steps.ver.outputs.version }}
+          -PappVersionCode=${{ steps.ver.outputs.code }}
+
+      - name: Name and verify APK
+        id: apk
+        shell: bash
+        run: |
+          OUT="fSSH-${{ steps.ver.outputs.version }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$OUT"
+          BT="$ANDROID_HOME/build-tools/34.0.0"
+          "$BT/apksigner" verify --verbose "$OUT" | head -8
+          "$BT/aapt2" dump badging "$OUT" | grep -E "^package|sdkVersion|targetSdk|native-code"
+          unzip -l "$OUT" | grep -E "lib/.*/lib(dropbear|scp|sftp)\.so" | awk '{print $1, $4}'
+          ls -l "$OUT"
+          echo "file=$OUT" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.apk.outputs.file }}
+          path: ${{ steps.apk.outputs.file }}
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.apk.outputs.file }}
+          generate_release_notes: true

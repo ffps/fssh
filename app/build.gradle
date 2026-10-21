@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Passed by CI:  -PappVersionName=1.2.3 -PappVersionCode=10203
+def vName = project.findProperty('appVersionName') ?: '0.0.0-dev'
+def vCode = (project.findProperty('appVersionCode') ?: '1') as int
+
+android {
+    namespace 'net.fssh'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'net.fssh'
+        minSdk 17
+        targetSdk 34
+        versionCode vCode
+        versionName vName
+        // native binaries are prebuilt by native/build.sh into src/main/jniLibs
+        ndk { abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64' }
+    }
+
+    signingConfigs {
+        release {
+            def ks = System.getenv('KEYSTORE_FILE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // the "libraries" are executables: they must be extracted to nativeLibraryDir
+            useLegacyPackaging = true
+            keepDebugSymbols.add('**/*.so')
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}

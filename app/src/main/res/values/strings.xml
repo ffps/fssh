@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">fSSH</string>
+    <string name="port">Port</string>
+    <string name="password">Password</string>
+    <string name="show_password">Show password</string>
+    <string name="autostart">Start on device boot</string>
+    <string name="start">Start</string>
+    <string name="stop">Stop</string>
+    <string name="starting">Starting…</string>
+    <string name="listening">Port %d</string>
+    <string name="status_running">Running on port %d</string>
+    <string name="status_stopped">Stopped</string>
+    <string name="status_error">Error: %s</string>
+    <string name="err_port">Port must be 1–65535</string>
+    <string name="err_password">Set a password to start the server</string>
+    <string name="err_config">Port or password is not set</string>
+    <string name="err_binary">Server binary not found for this CPU</string>
+    <string name="err_start">Cannot start server</string>
+    <string name="err_exited">Server exited</string>
+</resources>
