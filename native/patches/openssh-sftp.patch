@@ -33,3 +33,100 @@ index 2c70f89..e5a5fa7 100644
  	}
  
  	return (sftp_server_main(argc, argv, user_pw));
+diff --git a/sftp-server.c b/sftp-server.c
+index f87fc58..767267b 100644
+--- a/sftp-server.c
++++ b/sftp-server.c
+@@ -21,7 +21,46 @@
+ #include <sys/resource.h>
+ #include <sys/stat.h>
+ #include <sys/time.h>
+-#include <sys/statvfs.h>
++#include <sys/vfs.h>
++#include <string.h>
++
++/* fSSH: bionic < API 21 has no statvfs(); emulate it on top of statfs() */
++struct fssh_statvfs {
++	unsigned long f_bsize, f_frsize, f_fsid, f_flag, f_namemax;
++	unsigned long long f_blocks, f_bfree, f_bavail, f_files, f_ffree, f_favail;
++};
++#define ST_RDONLY 1
++#define ST_NOSUID 2
++static int
++fssh_conv(int r, struct statfs *s, struct fssh_statvfs *v)
++{
++	if (r != 0)
++		return r;
++	memset(v, 0, sizeof(*v));
++	v->f_bsize = s->f_bsize;
++	v->f_frsize = s->f_bsize;
++	v->f_blocks = s->f_blocks;
++	v->f_bfree = s->f_bfree;
++	v->f_bavail = s->f_bavail;
++	v->f_files = s->f_files;
++	v->f_ffree = s->f_ffree;
++	v->f_favail = s->f_ffree;
++	v->f_namemax = 255;
++	v->f_flag = ((s->f_flags & 1) ? ST_RDONLY : 0) | ((s->f_flags & 2) ? ST_NOSUID : 0);
++	return 0;
++}
++static int
++fssh_statvfs_path(const char *path, struct fssh_statvfs *v)
++{
++	struct statfs s;
++	return fssh_conv(statfs(path, &s), &s, v);
++}
++static int
++fssh_fstatvfs_fd(int fd, struct fssh_statvfs *v)
++{
++	struct statfs s;
++	return fssh_conv(fstatfs(fd, &s), &s, v);
++}
+ 
+ #include <dirent.h>
+ #include <errno.h>
+@@ -645,7 +684,7 @@ send_attrib(uint32_t id, const Attrib *a)
+ }
+ 
+ static void
+-send_statvfs(uint32_t id, struct statvfs *st)
++send_statvfs(uint32_t id, struct fssh_statvfs *st)
+ {
+ 	struct sshbuf *msg;
+ 	uint64_t flag;
+@@ -1385,7 +1424,7 @@ static void
+ process_extended_statvfs(uint32_t id)
+ {
+ 	char *path;
+-	struct statvfs st;
++	struct fssh_statvfs st;
+ 	int r;
+ 
+ 	if ((r = sshbuf_get_cstring(iqueue, &path, NULL)) != 0)
+@@ -1393,7 +1432,7 @@ process_extended_statvfs(uint32_t id)
+ 	debug3("request %u: statvfs", id);
+ 	logit("statvfs \"%s\"", path);
+ 
+-	if (statvfs(path, &st) != 0)
++	if (fssh_statvfs_path(path, &st) != 0)
+ 		send_status(id, errno_to_portable(errno));
+ 	else
+ 		send_statvfs(id, &st);
+@@ -1404,7 +1443,7 @@ static void
+ process_extended_fstatvfs(uint32_t id)
+ {
+ 	int r, handle, fd;
+-	struct statvfs st;
++	struct fssh_statvfs st;
+ 
+ 	if ((r = get_handle(iqueue, &handle)) != 0)
+ 		fatal_fr(r, "parse");
+@@ -1414,7 +1453,7 @@ process_extended_fstatvfs(uint32_t id)
+ 		send_status(id, SSH2_FX_FAILURE);
+ 		return;
+ 	}
+-	if (fstatvfs(fd, &st) != 0)
++	if (fssh_fstatvfs_fd(fd, &st) != 0)
+ 		send_status(id, errno_to_portable(errno));
+ 	else
+ 		send_statvfs(id, &st);

@@ -18,15 +18,21 @@ JOBS=$(nproc)
 # compile against old NDK headers, replace that source by an empty file and retry.
 # If the stub was actually needed, the final link fails with an "undefined reference".
 build_tolerant() {
-  local out bad f n
+  local out bad f n p
   for n in 1 2 3 4 5 6 7 8; do
     if out=$(make -k -j"$JOBS" "$@" 2>&1); then return 0; fi
     bad=$(printf '%s\n' "$out" | sed -n 's/.*\*\*\* \[Makefile:[0-9]*: \(.*\)\.o\] Error.*/\1/p' | sort -u)
     if [ -z "$bad" ]; then printf '%s\n' "$out" | tail -40; return 1; fi
     for f in $bad; do
       p=$(find . -name "$f.c" | head -1)
-      [ -n "$p" ] || { printf '%s\n' "$out" | tail -40; return 1; }
+      case "$p" in
+        ./dns.c|./openbsd-compat/*) ;;
+        *) echo "ERROR: required source does not compile: $p"
+           printf '%s\n' "$out" | grep -A6 -E "$f\.c:[0-9]+:[0-9]+: error" | head -60
+           return 1 ;;
+      esac
       echo "NOTE: stubbing source that does not compile on this NDK: $p"
+      printf '%s\n' "$out" | grep -m3 -E "$f\.c:[0-9]+:[0-9]+: error" || true
       : > "$p"
     done
   done
