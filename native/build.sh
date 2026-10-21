@@ -57,6 +57,7 @@ while IFS=: read -r ABI TRIPLE API; do
   # mblen is only used by the sftp client, never linked into sftp-server.
   ac_cv_func_llabs=yes ac_cv_func_mblen=yes ac_cv_func_getpagesize=yes ac_cv_func_lldiv=yes \
   ac_cv_func_strtoll=yes ac_cv_func_strtoull=yes ac_cv_func_atoll=yes \
+  ac_cv_func_bzero=yes ac_cv_func_bcopy=yes ac_cv_func_bcmp=yes \
   ./configure --host="$HOSTT" CC="$CC" CFLAGS="$COMMON_CFLAGS" LDFLAGS="$COMMON_LDFLAGS" \
       --without-openssl --without-zlib --without-pam --without-selinux --without-libedit \
       --without-hardening --disable-largefile --disable-strip --disable-security-key --disable-pkcs11 >/dev/null
