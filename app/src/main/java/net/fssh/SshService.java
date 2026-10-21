@@ -96,6 +96,7 @@ public class SshService extends Service {
 
     private Notification notif(String text) {
         Intent open = new Intent(this, MainActivity.class)
+                .putExtra(MainActivity.EXTRA_UI, true) // "show the window", never auto-start
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         int pf = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, pf);
@@ -121,6 +122,7 @@ public class SshService extends Service {
 
     private void postError(String msg) {
         Intent open = new Intent(this, MainActivity.class)
+                .putExtra(MainActivity.EXTRA_UI, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         int pf = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
         Notification.Builder b = Build.VERSION.SDK_INT >= 26
@@ -151,6 +153,7 @@ public class SshService extends Service {
         bin.mkdirs();
         // NetBox/WinSCP-style clients run "scp -t ..." through a shell: scp must be in PATH
         link(bin, "scp", new File(lib, "libscp.so"));
+        link(bin, "ls", new File(lib, "libls.so")); // proper "ls -la" with "." and ".."
         File sshDir = new File(files, "ssh");
         sshDir.mkdirs();
         String home = Cfg.home(this);

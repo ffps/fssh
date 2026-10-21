@@ -60,7 +60,7 @@ jobs:
         run: |
           bash native/build.sh "$NDK_DIR" app/src/main/jniLibs
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            for f in libdropbear.so libscp.so libsftp.so; do
+            for f in libdropbear.so libscp.so libsftp.so libls.so; do
               test -s "app/src/main/jniLibs/$abi/$f" || { echo "missing $abi/$f"; exit 1; }
             done
           done
@@ -107,7 +107,7 @@ jobs:
           BT="$ANDROID_HOME/build-tools/34.0.0"
           "$BT/apksigner" verify --verbose "$OUT" | head -8
           "$BT/aapt2" dump badging "$OUT" | grep -E "^package|sdkVersion|targetSdk|native-code"
-          unzip -l "$OUT" | grep -E "lib/.*/lib(dropbear|scp|sftp)\.so" | awk '{print $1, $4}'
+          unzip -l "$OUT" | grep -E "lib/.*/lib(dropbear|scp|sftp|ls)\.so" | awk '{print $1, $4}'
           ls -l "$OUT"
           echo "file=$OUT" >> "$GITHUB_OUTPUT"
 

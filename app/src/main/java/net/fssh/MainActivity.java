@@ -30,6 +30,7 @@ import android.widget.Toast;
 
 /** Settings window. Built in code to keep the APK tiny. */
 public class MainActivity extends Activity {
+    static final String EXTRA_UI = "ui";
     private static final int GREEN = 0xFF0D9488, RED = 0xFFD32F2F, GRAY = 0xFF666666;
 
     private EditText etPort, etPass, etHome;
@@ -54,6 +55,19 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+
+        // Autostart option: opening the app just starts the service (notification appears) and
+        // leaves; the window is shown only from the notification or when the service already runs.
+        if (!getIntent().getBooleanExtra(EXTRA_UI, false) && !SshService.running
+                && Cfg.autostart(this) && Cfg.pass(this).length() > 0) {
+            Cfg.setWant(this, true);
+            SshService.error = "";
+            Intent s = new Intent(this, SshService.class);
+            if (Build.VERSION.SDK_INT >= 26) startForegroundService(s);
+            else startService(s);
+            finish();
+            return;
+        }
         setTitle(R.string.app_name);
 
         LinearLayout col = new LinearLayout(this);
@@ -77,8 +91,9 @@ public class MainActivity extends Activity {
 
         col.addView(label(R.string.password));
         etPass = new EditText(this);
+        etPass.setSingleLine(true); // resets the transformation, so it goes first
         etPass.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        etPass.setSingleLine(true);
+        etPass.setTransformationMethod(PasswordTransformationMethod.getInstance());
         etPass.setText(Cfg.pass(this));
         col.addView(etPass, new LinearLayout.LayoutParams(-1, -2));
 
@@ -266,11 +281,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        h.post(poll);
+        if (btn != null) h.post(poll);
     }
 
     @Override
     protected void onPause() {
+        if (btn == null) { super.onPause(); return; } // finished early (autostart path)
         h.removeCallbacks(poll);
         if (!shownRunning) { // keep what the user typed
             try {

@@ -82,6 +82,10 @@ while IFS=: read -r ABI TRIPLE API; do
   "$STRIP" -o "$OUT/$ABI/libdropbear.so" dropbear
   "$STRIP" -o "$OUT/$ABI/libscp.so" scp
 
+  # ---- ls (toolbox ls lacks "." / ".." and the link-count column)
+  "$CC" $COMMON_CFLAGS $COMMON_LDFLAGS -o "$WORK/ls-$ABI" "$HERE/ls.c"
+  "$STRIP" -o "$OUT/$ABI/libls.so" "$WORK/ls-$ABI"
+
   # ---- sftp-server
   B=$WORK/openssh-$ABI; rm -rf "$B"; cp -r "$WORK/openssh-src" "$B"; cd "$B"
   # -D__sentinel__=__sentinel__: stop OpenSSH's defines.h from #defining it to nothing, which
