@@ -14,6 +14,25 @@ WORK=${WORK:-$HERE/../build-native}
 TC=$NDK/toolchains/llvm/prebuilt/linux-x86_64
 JOBS=$(nproc)
 
+# make, but when OpenSSH's portability code (DNS, pty, ... - not needed by sftp-server) fails to
+# compile against old NDK headers, replace that source by an empty file and retry.
+# If the stub was actually needed, the final link fails with an "undefined reference".
+build_tolerant() {
+  local out bad f n
+  for n in 1 2 3 4 5 6 7 8; do
+    if out=$(make -k -j"$JOBS" "$@" 2>&1); then return 0; fi
+    bad=$(printf '%s\n' "$out" | sed -n 's/.*\*\*\* \[Makefile:[0-9]*: \(.*\)\.o\] Error.*/\1/p' | sort -u)
+    if [ -z "$bad" ]; then printf '%s\n' "$out" | tail -40; return 1; fi
+    for f in $bad; do
+      p=$(find . -name "$f.c" | head -1)
+      [ -n "$p" ] || { printf '%s\n' "$out" | tail -40; return 1; }
+      echo "NOTE: stubbing source that does not compile on this NDK: $p"
+      : > "$p"
+    done
+  done
+  printf '%s\n' "$out" | tail -40; return 1
+}
+
 mkdir -p "$WORK" "$OUT"
 cd "$WORK"
 [ -d dropbear-src ] || git clone -q --depth 1 --branch "$DROPBEAR_TAG" https://github.com/mkj/dropbear dropbear-src
@@ -57,18 +76,11 @@ while IFS=: read -r ABI TRIPLE API; do
   # mblen is only used by the sftp client, never linked into sftp-server.
   ac_cv_func_llabs=yes ac_cv_func_mblen=yes ac_cv_func_getpagesize=yes ac_cv_func_lldiv=yes \
   ac_cv_func_strtoll=yes ac_cv_func_strtoull=yes ac_cv_func_atoll=yes \
-  ac_cv_func_bzero=yes ac_cv_func_bcopy=yes ac_cv_func_bcmp=yes ac_cv_func_getrrsetbyname=yes \
+  ac_cv_func_bzero=yes ac_cv_func_bcopy=yes ac_cv_func_bcmp=yes ac_cv_func_getrrsetbyname=yes ac_cv_search_getrrsetbyname='none required' \
   ./configure --host="$HOSTT" CC="$CC" CFLAGS="$COMMON_CFLAGS" LDFLAGS="$COMMON_LDFLAGS" \
       --without-openssl --without-zlib --without-pam --without-selinux --without-libedit \
       --without-hardening --disable-largefile --disable-strip --disable-security-key --disable-pkcs11 >/dev/null
-  # Build the compat library tolerantly: objects sftp-server does not need (DNS, pty, ...) may fail
-  # on these old headers; archive whatever compiled and let the final link decide.
-  make -k -j"$JOBS" openbsd-compat/libopenbsd-compat.a >/dev/null 2>&1 || true
-  if [ ! -f openbsd-compat/libopenbsd-compat.a ]; then
-    echo "compat library incomplete, archiving the objects that compiled:"
-    (cd openbsd-compat && "$AR" rcs libopenbsd-compat.a *.o)
-  fi
-  make -j"$JOBS" sftp-server >/dev/null
+  build_tolerant sftp-server
   "$STRIP" -o "$OUT/$ABI/libsftp.so" sftp-server
   ls -l "$OUT/$ABI"
   cd "$WORK"
