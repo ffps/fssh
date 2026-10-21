@@ -1,3 +1,25 @@
+diff --git a/openbsd-compat/explicit_bzero.c b/openbsd-compat/explicit_bzero.c
+index 68cd2c1..cd71317 100644
+--- a/openbsd-compat/explicit_bzero.c
++++ b/openbsd-compat/explicit_bzero.c
+@@ -39,7 +39,7 @@ explicit_bzero(void *p, size_t n)
+  * Indirect bzero through a volatile pointer to hopefully avoid
+  * dead-store optimisation eliminating the call.
+  */
+-static void (* volatile ssh_bzero)(void *, size_t) = bzero;
++static void *(* volatile ssh_bzero)(void *, int, size_t) = memset; /* fSSH: bzero() is inline-only in old bionic */
+ 
+ void
+ explicit_bzero(void *p, size_t n)
+@@ -57,7 +57,7 @@ explicit_bzero(void *p, size_t n)
+ # endif
+ #endif
+ 
+-	ssh_bzero(p, n);
++	ssh_bzero(p, 0, n);
+ }
+ 
+ #endif /* HAVE_MEMSET_S */
 diff --git a/sftp-server-main.c b/sftp-server-main.c
 index 2c70f89..e5a5fa7 100644
 --- a/sftp-server-main.c
