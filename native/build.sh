@@ -18,21 +18,28 @@ JOBS=$(nproc)
 # compile against old NDK headers, replace that source by an empty file and retry.
 # If the stub was actually needed, the final link fails with an "undefined reference".
 build_tolerant() {
-  local out bad f n p
+  local out bad f n p diag
   for n in 1 2 3 4 5 6 7 8; do
     if out=$(make -k -j"$JOBS" "$@" 2>&1); then return 0; fi
     bad=$(printf '%s\n' "$out" | sed -n 's/.*\*\*\* \[Makefile:[0-9]*: \(.*\)\.o\] Error.*/\1/p' | sort -u)
     if [ -z "$bad" ]; then printf '%s\n' "$out" | tail -40; return 1; fi
     for f in $bad; do
       p=$(find . -name "$f.c" | head -1)
+      # rebuild just this object serially to get a clean error message
+      rm -f "${p%.c}.o"
+      diag=$(cd "$(dirname "$p")" && make "$(basename "${p%.c}").o" 2>&1 | grep -E -B2 -A8 "error:" | head -50) || true
       case "$p" in
-        ./dns.c|./openbsd-compat/*) ;;
-        *) echo "ERROR: required source does not compile: $p"
-           printf '%s\n' "$out" | grep -A6 -E "$f\.c:[0-9]+:[0-9]+: error" | head -60
-           return 1 ;;
+        ./dns.c|./openbsd-compat/*)
+          case "$p" in ./openbsd-compat/arc4random.c|./openbsd-compat/explicit_bzero.c) f="" ;; esac ;;
+        *) f="" ;;
       esac
+      if [ -z "$f" ]; then
+        echo "ERROR: required source does not compile: $p"
+        printf '%s\n' "$diag"
+        return 1
+      fi
       echo "NOTE: stubbing source that does not compile on this NDK: $p"
-      printf '%s\n' "$out" | grep -m3 -E "$f\.c:[0-9]+:[0-9]+: error" || true
+      printf '%s\n' "$diag" | head -6
       : > "$p"
     done
   done
