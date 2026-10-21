@@ -90,7 +90,9 @@ while IFS=: read -r ABI TRIPLE API; do
   ac_cv_func_llabs=yes ac_cv_func_mblen=yes ac_cv_func_getpagesize=yes ac_cv_func_lldiv=yes \
   ac_cv_func_strtoll=yes ac_cv_func_strtoull=yes ac_cv_func_atoll=yes \
   ac_cv_func_bzero=yes ac_cv_func_bcopy=yes ac_cv_func_bcmp=yes ac_cv_func_getrrsetbyname=yes ac_cv_search_getrrsetbyname='none required' \
-  ./configure --host="$HOSTT" CC="$CC" CFLAGS="$COMMON_CFLAGS" LDFLAGS="$COMMON_LDFLAGS" \
+  # -D__sentinel__=__sentinel__: stop OpenSSH's defines.h from #defining it to nothing, which
+  # breaks bionic's unistd.h (__attribute__((__sentinel__(1)))) when it is included afterwards
+  ./configure --host="$HOSTT" CC="$CC" CFLAGS="$COMMON_CFLAGS -D__sentinel__=__sentinel__" LDFLAGS="$COMMON_LDFLAGS" \
       --without-openssl --without-zlib --without-pam --without-selinux --without-libedit \
       --without-hardening --disable-largefile --disable-strip --disable-security-key --disable-pkcs11 >/dev/null
   build_tolerant sftp-server
