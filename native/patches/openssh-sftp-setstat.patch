@@ -1,0 +1,64 @@
+--- a/sftp-server.c
++++ b/sftp-server.c
+@@ -1035,7 +1035,7 @@
+ 	}
+ 	if (a.flags & SSH2_FILEXFER_ATTR_PERMISSIONS) {
+ 		logit("set \"%s\" mode %04o", name, a.perm);
+-		r = chmod(name, a.perm & 07777);
++		r = (chmod(name, a.perm & 07777), 0); /* fSSH: sdcard FUSE rejects these */
+ 		if (r == -1)
+ 			status = errno_to_portable(errno);
+ 	}
+@@ -1046,14 +1046,14 @@
+ 		strftime(buf, sizeof(buf), "%Y%m%d-%H:%M:%S",
+ 		    localtime(&t));
+ 		logit("set \"%s\" modtime %s", name, buf);
+-		r = utimes(name, attrib_to_tv(&a));
++		r = (utimes(name, attrib_to_tv(&a)), 0); /* fSSH: sdcard FUSE rejects these */
+ 		if (r == -1)
+ 			status = errno_to_portable(errno);
+ 	}
+ 	if (a.flags & SSH2_FILEXFER_ATTR_UIDGID) {
+ 		logit("set \"%s\" owner %lu group %lu", name,
+ 		    (u_long)a.uid, (u_long)a.gid);
+-		r = chown(name, a.uid, a.gid);
++		r = (chown(name, a.uid, a.gid), 0); /* fSSH: sdcard FUSE rejects these */
+ 		if (r == -1)
+ 			status = errno_to_portable(errno);
+ 	}
+@@ -1089,9 +1089,9 @@
+ 		if (a.flags & SSH2_FILEXFER_ATTR_PERMISSIONS) {
+ 			logit("set \"%s\" mode %04o", name, a.perm);
+ #ifdef HAVE_FCHMOD
+-			r = fchmod(fd, a.perm & 07777);
++			r = (fchmod(fd, a.perm & 07777), 0); /* fSSH: sdcard FUSE rejects these */
+ #else
+-			r = chmod(name, a.perm & 07777);
++			r = (chmod(name, a.perm & 07777), 0); /* fSSH: sdcard FUSE rejects these */
+ #endif
+ 			if (r == -1)
+ 				status = errno_to_portable(errno);
+@@ -1104,9 +1104,9 @@
+ 			    localtime(&t));
+ 			logit("set \"%s\" modtime %s", name, buf);
+ #ifdef HAVE_FUTIMES
+-			r = futimes(fd, attrib_to_tv(&a));
++			r = (futimes(fd, attrib_to_tv(&a)), 0); /* fSSH: sdcard FUSE rejects these */
+ #else
+-			r = utimes(name, attrib_to_tv(&a));
++			r = (utimes(name, attrib_to_tv(&a)), 0); /* fSSH: sdcard FUSE rejects these */
+ #endif
+ 			if (r == -1)
+ 				status = errno_to_portable(errno);
+@@ -1115,9 +1115,9 @@
+ 			logit("set \"%s\" owner %lu group %lu", name,
+ 			    (u_long)a.uid, (u_long)a.gid);
+ #ifdef HAVE_FCHOWN
+-			r = fchown(fd, a.uid, a.gid);
++			r = (fchown(fd, a.uid, a.gid), 0); /* fSSH: sdcard FUSE rejects these */
+ #else
+-			r = chown(name, a.uid, a.gid);
++			r = (chown(name, a.uid, a.gid), 0); /* fSSH: sdcard FUSE rejects these */
+ #endif
+ 			if (r == -1)
+ 				status = errno_to_portable(errno);

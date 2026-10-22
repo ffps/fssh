@@ -51,8 +51,10 @@ cd "$WORK"
 [ -d dropbear-src ] || git clone -q --depth 1 --branch "$DROPBEAR_TAG" https://github.com/mkj/dropbear dropbear-src
 [ -d openssh-src ]  || git clone -q --depth 1 --branch "$OPENSSH_TAG" https://github.com/openssh/openssh-portable openssh-src
 git -C dropbear-src apply "$HERE/patches/dropbear-fssh.patch"
+git -C dropbear-src apply "$HERE/patches/dropbear-scp-perm.patch"
 git -C openssh-src  apply "$HERE/patches/openssh-sftp.patch"
 git -C openssh-src  apply "$HERE/patches/openssh-sftp-rename.patch"
+git -C openssh-src  apply "$HERE/patches/openssh-sftp-setstat.patch"
 (cd openssh-src && autoreconf -i >/dev/null)
 
 # abi : clang target : api

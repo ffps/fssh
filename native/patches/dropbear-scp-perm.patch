@@ -1,0 +1,44 @@
+--- a/src/scp.c
++++ b/src/scp.c
+@@ -1274,7 +1274,7 @@
+ 			sink(1, vect, src);
+ 			if (setimes) {
+ 				setimes = 0;
+-				if (utimes(vect[0], tv) < 0)
++				if (utimes(vect[0], tv) < 0 && 0)
+ 					run_err("%s: set times: %s",
+ 					    vect[0], strerror(errno));
+ 			}
+@@ -1355,9 +1355,9 @@
+ 		if (pflag) {
+ 			if (exists || omode != mode)
+ #ifdef HAVE_FCHMOD
+-				if (fchmod(ofd, omode)) {
++				if (fchmod(ofd, omode) && 0) {
+ #else /* HAVE_FCHMOD */
+-				if (chmod(np, omode)) {
++				if (chmod(np, omode) && 0) {
+ #endif /* HAVE_FCHMOD */
+ 					run_err("%s: set mode: %s",
+ 					    np, strerror(errno));
+@@ -1366,9 +1366,9 @@
+ 		} else {
+ 			if (!exists && omode != mode)
+ #ifdef HAVE_FCHMOD
+-				if (fchmod(ofd, omode & ~mask)) {
++				if (fchmod(ofd, omode & ~mask) && 0) {
+ #else /* HAVE_FCHMOD */
+-				if (chmod(np, omode & ~mask)) {
++				if (chmod(np, omode & ~mask) && 0) {
+ #endif /* HAVE_FCHMOD */
+ 					run_err("%s: set mode: %s",
+ 					    np, strerror(errno));
+@@ -1382,7 +1382,7 @@
+ 		(void) response();
+ 		if (setimes && wrerr == NO) {
+ 			setimes = 0;
+-			if (utimes(np, tv) < 0) {
++			if (utimes(np, tv) < 0 && 0) {
+ 				run_err("%s: set times: %s",
+ 				    np, strerror(errno));
+ 				wrerr = DISPLAYED;
