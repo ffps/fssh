@@ -105,8 +105,10 @@ public class MainActivity extends Activity {
                 int sel = etPass.getSelectionStart();
                 etPass.setTransformationMethod(on ? null : PasswordTransformationMethod.getInstance());
                 if (sel >= 0) etPass.setSelection(sel);
+                Cfg.setShowPass(MainActivity.this, on);
             }
         });
+        cbShow.setChecked(Cfg.showPass(this));
         col.addView(cbShow);
 
         col.addView(label(R.string.home_dir));

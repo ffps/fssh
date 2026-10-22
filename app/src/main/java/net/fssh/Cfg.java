@@ -35,6 +35,8 @@ final class Cfg {
     }
     static void setAutostart(Context c, boolean v) { p(c).edit().putBoolean("auto", v).commit(); }
     static void setWant(Context c, boolean v) { p(c).edit().putBoolean("want", v).commit(); }
+    static boolean showPass(Context c) { return p(c).getBoolean("show", true); }
+    static void setShowPass(Context c, boolean v) { p(c).edit().putBoolean("show", v).commit(); }
     static boolean asked(Context c) { return p(c).getBoolean("asked", false); }
     static void setAsked(Context c) { p(c).edit().putBoolean("asked", true).commit(); }
 }
