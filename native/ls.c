@@ -107,6 +107,23 @@ static int list_dir(const char *dir) {
         n++;
     }
     closedir(d);
+    /* FUSE (/sdcard) readdir omits "." and ".." */
+    if (f_a) {
+        const char *dd[2] = {".", ".."};
+        for (int k = 0; k < 2; k++) {
+            int have = 0;
+            for (size_t i = 0; i < n; i++) if (!strcmp(v[i].name, dd[k])) have = 1;
+            if (have) continue;
+            if (n == cap) { cap = cap ? cap * 2 : 64; v = realloc(v, cap * sizeof *v); if (!v) exit(2); }
+            v[n].name = strdup(dd[k]);
+            size_t pl = strlen(dir) + 4;
+            v[n].path = malloc(pl);
+            snprintf(v[n].path, pl, "%s/%s", dir, dd[k]);
+            memset(&v[n].st, 0, sizeof v[n].st);
+            v[n].ok = (f_l || f_F) ? (lstat(v[n].path, &v[n].st) == 0) : 0;
+            n++;
+        }
+    }
     qsort(v, n, sizeof *v, cmp);
     if (f_l) {
         long long blocks = 0;

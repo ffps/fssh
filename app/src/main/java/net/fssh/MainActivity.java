@@ -143,6 +143,16 @@ public class MainActivity extends Activity {
         lp.topMargin = dp(24);
         col.addView(btn, lp);
 
+        String ver = "";
+        try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { }
+        TextView tvVer = new TextView(this);
+        tvVer.setText("fSSH " + ver);
+        tvVer.setTextSize(12);
+        tvVer.setTextColor(0xFF888888);
+        tvVer.setGravity(Gravity.CENTER_HORIZONTAL);
+        tvVer.setPadding(0, dp(24), 0, 0);
+        col.addView(tvVer, new LinearLayout.LayoutParams(-1, -2));
+
         ScrollView sv = new ScrollView(this);
         sv.addView(col);
         setContentView(sv);
