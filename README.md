@@ -1,7 +1,7 @@
-# fSSH
+# <p align="center"><img src="icons/fssh.svg" /><br />fSSH - Android4+ SSH сервер</p>
 
 Минимальный SSH/SCP/SFTP-сервер для Android 4.2+ (API 17). Один пользователь, вход по паролю
-(имя пользователя — любое), для администрирования устройства.
+(имя пользователя — любое), автостарт, для администрирования устройства.
 
 Внутри — [Dropbear](https://matt.ucc.asn.au/dropbear/) (SSH + `scp`) и `sftp-server` из OpenSSH,
 собранные NDK под armeabi-v7a, arm64-v8a, x86, x86_64. Java-часть — только окно настроек и
@@ -23,19 +23,21 @@ git tag v1.2.3 && git push origin v1.2.3
 
 Workflow `.github/workflows/release.yml` соберёт `fSSH-1.2.3.apk` и приложит его к GitHub Release.
 
-Подпись: добавьте секреты репозитория `KEYSTORE_BASE64` (`base64 -w0 release.jks`),
-`KEYSTORE_PASSWORD`, `KEY_ALIAS`, при необходимости `KEY_PASSWORD`. Без них APK подписывается
-временным ключом — такой APK придётся удалить перед установкой следующей версии.
+Подпись: добавьте секреты репозитория
+
+* `KEYSTORE_BASE64` (`base64 -w0 release.jks`),
+* `KEYSTORE_PASSWORD`,
+* `KEY_ALIAS`,
+* `KEY_PASSWORD` при необходимости.
+
+Без них APK подписывается временным ключом — такой APK придётся удалить перед установкой следующей версии.
 
 Локально: `native/build.sh <NDK r23c> app/src/main/jniLibs`, затем `gradle :app:assembleRelease`.
+
 NDK r23c — последний, поддерживающий API 17.
-
-## 
-
-## Иконка
-
-`icons/fssh.svg` — исходник; PNG для приложения получены из него (`res/drawable-*dpi/ic_launcher.png`, `ic_stat.png`), для Android 8+ — adaptive-иконка.
 
 ## Лицензии
 
 Dropbear — MIT-подобная лицензия, OpenSSH — BSD. Патчи: `native/patches/`.
+
+Код написан Claude (Anthropic) free.

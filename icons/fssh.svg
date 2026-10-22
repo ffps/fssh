@@ -9,10 +9,10 @@
   <rect width="120" height="120" rx="26" fill="url(#g2)"/>
 
   <path
-    d="M48 40 L73 60 L48 80"
+    d="M54 40 L70 60 L54 80"
     fill="none"
     stroke="#FFFFFF"
-    stroke-width="14"
+    stroke-width="12"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
