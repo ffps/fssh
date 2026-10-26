@@ -7,11 +7,11 @@ def vName = project.findProperty('appVersionName') ?: '0.0.0-dev'
 def vCode = (project.findProperty('appVersionCode') ?: '1') as int
 
 android {
-    namespace 'net.fssh'
+    namespace 'com.ffps.fssh'
     compileSdk 34
 
     defaultConfig {
-        applicationId 'net.fssh'
+        applicationId 'com.ffps.fssh'
         minSdk 17
         targetSdk 34
         versionCode vCode
